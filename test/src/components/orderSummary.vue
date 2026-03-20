@@ -70,20 +70,13 @@
           >
             płaci {{ user.name }}: <span class="phone">{{ user.phone }}</span>
           </div>
-          <div v-if="isCurrentUserManager">
-
-          </div>
-          <div  v-for="(pizzas, restaurant) in SummaryOrders" :key="restaurant" >
+          <div v-if="isCurrentUserManager"></div>
+          <div v-for="(pizzas, restaurant) in SummaryOrders" :key="restaurant">
             <h3>{{ restaurant }}</h3>
             <!-- {{ selectPizzas }} -->
             <ul v-if="isCurrentUserManager">
               <li v-for="(count, name) in pizzas" :key="name">
-                <input
-                  type="checkbox"
-                  :value="name"
-                  v-model="checkedPizza"
-                  
-                />
+                <input type="checkbox" :value="name" v-model="checkedPizza" />
                 {{ name }}: <span v-if="count < 2">{{ count }}</span>
                 <!-- ten v-model albo nie działa albo nie jest potrzbeny -->
                 <select v-if="count > 1" v-model.number="selectPizzas[name]">
@@ -172,7 +165,7 @@
       </div>
 
       <div v-else class="empty-state">
-        <p>Brak danych lub czekam na zatwierdzenie...</p>
+        <p>nie ma zamówień &nbsp; &nbsp; &nbsp; o<span style="font-size: 20px;">I</span>o</p>
       </div>
 
       <hr class="divider" />
@@ -328,13 +321,11 @@ export default {
       this.UpdataOrder(item);
     },
     async approveFlavors() {
-      const hasPizzas = Object.keys(this.checkedPizza || {}).length > 0;
-
-      if (!hasPizzas) {
-        alert("Najpierw wybierz jakieś pizze do zamówienia!");
+      const validationMessage = this.SummarySlices;
+      if (!validationMessage.includes("Idealnie")) {
+        alert("Błąd w ilości pizz");
         return;
-      }
-
+      } 
       const person = this.summary.find(
         (p) => p && p.name === this.payingPerson,
       );
@@ -342,17 +333,10 @@ export default {
       const phoneToVerify = this.tel || (person ? person.phone : null);
 
       if (!this.payingPerson || !phoneToVerify) {
-        alert("Musisz wybrać osobę zamawiającą i podać numer telefonu!");
+        alert("Wybierz osobę płacącą i uzupełnij numer telefonu!");
         return;
       }
 
-      // 3. Opcjonalna walidacja formatu telefonu (np. minimum 9 cyfr)
-      if (phoneToVerify.toString().replace(/\s/g, "").length < 9) {
-        alert("Numer telefonu wydaje się być za krótki!");
-        return;
-      }
-
-      // Reszta Twojej logiki zapisu...
       try {
         const clearResponse = await fetch(
           `https://webwizards.home.pl/jacek/pizza/api/?method=clearTodayOrder`,
@@ -372,13 +356,12 @@ export default {
             selectedPizzas: { ...this.checkedPizza },
             payer: {
               name: this.payingPerson,
-              phone: phoneToVerify, // Używamy zweryfikowanego numeru
+              phone: phoneToVerify,
               totalToPayAtRestaurant: this.TotalMoney,
             },
             participants: participantsList,
           };
 
-          // Wysyłka POST (tak jak w Twoim kodzie)
           const setResponse = await fetch(
             `https://webwizards.home.pl/jacek/pizza/api/?method=setTodayOrder`,
             {
@@ -393,7 +376,7 @@ export default {
           }
         }
       } catch (error) {
-        console.error("Błąd podczas procesowania zamówienia:", error);
+        console.error("Wystąpił błąd podczas finalizacji:", error);
       }
     },
     async fetchOrderedPizzas() {
@@ -515,20 +498,15 @@ export default {
       let total = 0;
       if (!this.checkedPizza || this.checkedPizza.length === 0) return "0.00";
 
-      // Iterujemy po zaznaczonych nazwach pizz do zamówienia
       this.checkedPizza.forEach((pizzaName) => {
-        // Pobieramy ilość z Twojego selecta (domyślnie 1, jeśli nie wybrano inaczej)
         const quantity = parseInt(this.selectPizzas[pizzaName]) || 1;
 
-        // Musimy znaleźć cenę tej pizzy. Szukamy jej w menu pierwszej
-        // lepszej restauracji, która ją oferuje
         let price = 0;
         for (const restaurant in this.allMenus) {
           const pizzaInMenu = this.allMenus[restaurant].find(
             (p) => p.name === pizzaName,
           );
           if (pizzaInMenu) {
-            // Pobieramy cenę (zakładam, że variants[1] to ta właściwa cena)
             price = pizzaInMenu.variants?.[1]?.price || 0;
             break;
           }
@@ -578,7 +556,6 @@ export default {
       }
     },
 
-    // Dodaj to do computed:
     totalSlicesCount() {
       if (!this.summary || !Array.isArray(this.summary)) return 0;
       return this.summary.reduce(
@@ -586,6 +563,7 @@ export default {
         0,
       );
     },
+
     payingUsers() {
       return this.summary ? this.summary.filter((u) => u?.phone) : [];
     },

@@ -1,7 +1,6 @@
 <template>
   <div class="body">
     <topBar :steps="steps" :currentStep="currentStep" />
-
     <div class="content">
       <div class="col-main">
         <userForm v-if="currentStep === 1" v-on:set="user = $event" />
@@ -27,7 +26,7 @@
             "
             class="submit-btn"
           >
-            Wyślij 
+            Wyślij
           </button>
         </div>
       </div>
@@ -149,7 +148,7 @@ export default {
         this.pizzas = [];
         //jjsjsjdjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
         // this.fetchSummary();
-        window.location.reload()
+        // window.location.reload();
       } catch (error) {
         console.error(error);
       }
