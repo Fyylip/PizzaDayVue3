@@ -51,6 +51,8 @@ export default {
   name: "UserForm",
   data() {
     return {
+      summary: [], 
+
       form: {
         name: "",
         paied: "",
@@ -58,13 +60,14 @@ export default {
         manager: false,
         isPaingPerson: false,
       },
-      slicesOptions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      slicesOptions: [1, 2, 3, 4, 5, 6, 7, 8],
       errors: {},
     };
   },
 
-  mounted() {
-    console.log("Obecne ciasteczka:", document.cookie);
+  async mounted() {
+    await this.getTodayOrder();
+
     const savedName = Cookies.get("user_name");
     if (savedName) {
       this.form.name = savedName;
@@ -72,22 +75,48 @@ export default {
   },
 
   methods: {
+    async getTodayOrder() {
+      try {
+        const response = await fetch(
+          `https://webwizards.home.pl/jacek/pizza/api/?method=getTodayOrder`,
+        );
+        const data = await response.json();
+
+        this.summary = data.participants || data || [];
+      } catch (error) {
+        console.error("Błąd pobierania zamówień:", error);
+        this.summary = [];
+      }
+    },
+
     validateForm() {
-      const isNameValid = !!this.form.name && this.form.name.length >= 3;
+      const isNameValid = !!this.form.name && this.form.name.trim().length >= 3;
       const isSliceValid = !!this.form.slice;
       const isPaymentValid = !!this.form.paied;
 
       if (!isNameValid || !isSliceValid || !isPaymentValid) {
-        alert("Przerósł cię formularz. Wypełnij cały");
+        alert("Przerósł Cię formularz. Wypełnij wszystkie pola!");
         return false;
       }
+
+      const normalizedName = this.form.name.trim().toLowerCase();
+      const alreadyExists = this.summary.some(
+        (p) => p && p.name && p.name.trim().toLowerCase() === normalizedName,
+      );
+
+      if (alreadyExists) {
+        alert(
+          `Użytkownik o tym imieniu jest już na liście. Jeżeli obaj macie tak na imie to podaj pełne imie i naziwko`,
+        );
+        return false;
+      }
+
       return true;
     },
 
     handleSubmit() {
       if (this.validateForm()) {
         this.handleName();
-
         this.$emit("set", { ...this.form });
         console.log("Formularz wysłany!");
       } else {
@@ -97,8 +126,7 @@ export default {
 
     handleName() {
       if (this.form.name && this.form.name.trim() !== "") {
-        Cookies.set("user_name", this.form.name, { expires: 100 });
-        console.log("Ciasteczko zapisane!");
+        Cookies.set("user_name", this.form.name.trim(), { expires: 100 });
       }
     },
   },

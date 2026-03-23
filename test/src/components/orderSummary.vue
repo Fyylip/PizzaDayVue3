@@ -24,6 +24,7 @@
                     v-model="payingPerson"
                     :value="item.name"
                   />
+                  <span>zaznacz jeśli płaci</span>
                   <span class="customer-name">{{ item?.name }}</span>
                   <div class="counter-btns">
                     <button @click="updateSlice(item, -1)" title="Odejmij">
@@ -80,7 +81,7 @@
             <!-- {{ selectPizzas }} -->
             <ul v-if="isCurrentUserManager">
               <li v-for="(count, name) in pizzas" :key="name">
-                <input type="checkbox" :value="name" v-model="checkedPizza" />
+                <input type="checkbox" :value="name" v-model="checkedPizza"/>
                 {{ name }}: <span v-if="count < 2">{{ count }}</span>
                 <select v-if="count > 1" v-model.number="selectPizzas[name]">
                   <option v-for="n in count" :key="n" :value="n">
@@ -171,22 +172,13 @@
       </div>
 
       <div v-else class="empty-state">
-        <p>
-          nie ma zamówień &nbsp; &nbsp; &nbsp; o<span style="font-size: 20px"
-            >I</span
-          >o
-        </p>
+        <p>nie ma zamówień LOL</p>
       </div>
 
       <hr class="divider" />
 
       <div class="admin-buttons">
-        <button class="btn-refresh" @click="fetchOrderedPizzas">
-          Pokaż całe zamówienie
-        </button>
-        <!-- <button class="btn-clear" @click="clearApi">
-          Wyczyść zamówienie
-        </button> -->
+        <button class="btn-clear" @click="clearApi">Wyczyść zamówienie</button>
       </div>
     </div>
   </div>
@@ -342,8 +334,34 @@ export default {
     },
     async updateSlice(item, change) {
       if (!item || !item.name) return;
+
+      const savedName = Cookies.get("user_name");
+
+      if (item.name !== savedName) {
+        alert("Tylko swoje możesz edytować XD.");
+        return;
+      }
+
       const newCount = (parseFloat(item.slice) || 0) + change;
-      item.slice = newCount >= 0 ? newCount : 0;
+
+      if (newCount > 8) {
+        return; 
+      }
+
+      if (newCount <= 0) {
+        const confirmRemoval = confirm(
+          `Czy na pewno rezygnujesz z swojej pizzy?`,
+        );
+
+        if (confirmRemoval) {
+          item.slice = 0;
+          await this.UpdataOrder(item);
+          this.fetchSummary();
+        }
+        return;
+      }
+
+      item.slice = newCount;
       this.UpdataOrder(item);
     },
     async approveFlavors() {
@@ -559,9 +577,11 @@ export default {
       const diffPizzas = requiredPizzas - pizzasSelected;
 
       if (diffPizzas > 0) {
-        return `Masz ${totalWantedSlices} kawałków (pełne pizze). Wybierz jeszcze ${diffPizzas} ${this.getPlural(diffPizzas, ['smak', 'smaki', 'smaków']) }`;
+        return `Masz ${totalWantedSlices} kawałków (pełne pizze). Wybierz jeszcze ${diffPizzas} ${this.getPlural(
+          diffPizzas,
+          ["smak", "smaki", "smaków"],
+        )}`;
       } else if (diffPizzas === 0) {
-        // TYLKO TUTAJ pojawi się słowo "Idealnie"
         return `${totalWantedSlices} kawałków. Idealnie! Pełne pizze (${pizzasSelected} szt).`;
       } else {
         return `Wybrałeś za dużo smaków względem liczby kawałków!`;
@@ -581,7 +601,11 @@ export default {
   mounted() {
     this.fetchrestaurants();
     this.fetchSummary();
-    this.polling = setInterval(() => this.fetchSummary(), 3000);
+    this.fetchOrderedPizzas();
+    this.polling = setInterval(() => {
+      this.fetchSummary();
+      this.fetchOrderedPizzas();
+    }, 3000);
   },
   beforeUnmount() {
     clearInterval(this.polling);
@@ -600,6 +624,7 @@ export default {
   max-height: 600px;
   overflow-x: hidden;
   overflow-y: scroll;
+  width: 100%;
 
   /* PRZYCISKI (Globalne) */
   button {
