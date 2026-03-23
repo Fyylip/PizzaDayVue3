@@ -148,7 +148,7 @@ export default {
         this.pizzas = [];
         //jjsjsjdjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
         // this.fetchSummary();
-        // window.location.reload();
+        window.location.reload();
       } catch (error) {
         console.error(error);
       }
@@ -179,76 +179,84 @@ export default {
 .body {
   margin: 0;
   padding: 0;
+  padding-bottom: 100px; /* Miejsce na przyklejony przycisk, by nie zasłaniał treści */
   min-height: 100vh;
-  background-color: #f8f9fa; /* Jasne tło, o którym pisaliśmy */
+  background-color: #f8f9fa;
 }
 
 .content {
   display: flex;
   flex-direction: row;
-  /* Zmniejszyłem gap, by zyskać miejsce na szeroką notatkę */
   gap: 20px;
   padding: 40px;
-  /* Zwiększyłem max-width, żeby przy szerokich ekranach wszystko się mieściło */
   max-width: 1600px;
   margin: 0 auto;
   align-items: flex-start;
   box-sizing: border-box;
 }
 
-/* Główna kolumna z lewej */
 .col-main {
   flex: 1;
   min-width: 0;
-  /* Dodatkowy margines, by odsunąć formularz od notatki */
   margin-right: 20px;
 }
 
-/* Kolumna z notatką - KLUCZOWE ZMIANY */
 .col-sidebar {
-  /* Szerokość dopasowana do nowej notatki (450px) + zapas na obrót (rotate) */
   width: 480px;
   position: sticky;
-  top: 100px; /* Miejsce na topBar */
+  top: 100px;
   display: flex;
   justify-content: flex-start;
-  /* Zapobiega wyjeżdżaniu poza ekran w prawo */
   padding-right: 20px;
   box-sizing: border-box;
 }
 
-/* Przycisk pieczątka */
+/* Kontener przycisku - teraz jako stała belka na dole */
 .actions {
-  margin-top: 30px;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  backdrop-filter: blur(2px);
+  padding: 20px 0;
   display: flex;
   justify-content: center;
+  z-index: 2000;
 }
 
 .submit-btn {
-  position: fixed;
-  bottom: 30px;
-  right: 30px;
-  z-index: 1000;
+  /* Szerszy przycisk */
+  width: 80%;
+  max-width: 600px;
+
   color: #b22222;
   border: 4px solid #b22222;
-  padding: 15px 40px;
-  font-family: "Inter", sans-serif; /* Zmienione na normalną czcionkę */
-  font-size: 1.3rem;
+  padding: 15px 0;
+  font-family: "Inter", sans-serif;
+  font-size: 1.5rem;
   font-weight: 900;
   text-transform: uppercase;
   cursor: pointer;
-  transform: rotate(-2deg);
   background: white;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
   transition: all 0.2s;
+  /* Lekki obrót dla stylu pieczątki */
+  transform: rotate(-1deg);
 }
 
 .submit-btn:hover {
-  background: #fdf2f2;
-  transform: rotate(0deg) scale(1.05);
+  background: #b22222;
+  color: white;
+  transform: rotate(0deg) scale(1.02);
 }
 
-/* Responsywność - poprawiona dla szerokiej notatki */
+/* Styl dla zablokowanego przycisku */
+.submit-btn:disabled {
+  border-color: #ccc;
+  color: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
 @media (max-width: 1200px) {
   .content {
     flex-direction: column;
@@ -258,7 +266,7 @@ export default {
 
   .col-sidebar {
     width: 100%;
-    max-width: 450px; /* Na mobile niech nie będzie szersza niż notatka */
+    max-width: 450px;
     position: static;
     order: 2;
     padding-right: 0;

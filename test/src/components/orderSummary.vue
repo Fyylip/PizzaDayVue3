@@ -3,9 +3,9 @@
     class="col summary-section"
     :class="{ 'is-collapsed': !isNotesExpanded }"
   >
-    <button class="toggle-notes" @click="isNotesExpanded = !isNotesExpanded">
-      {{ isNotesExpanded ? "✕ Ukryj" : "☰ Pokaż zamówienia" }}
-    </button>
+    <!-- <button class="toggle-notes" @click="isNotesExpanded = !isNotesExpanded">
+        {{ isNotesExpanded ? "✕ Ukryj" : "☰ Pokaż zamówienia" }}
+      </button> -->
     <div>
       <h2 v-if="isFullOrderVisible">Propozycja smaków</h2>
       <transition name="note-fade" v-if="isFullOrderVisible">
@@ -17,34 +17,38 @@
           <div v-for="(item, index) in summary" :key="index" class="order-card">
             <template v-if="item">
               <div class="order-header">
-                <span class="customer-name">
+                <div class="user-info">
                   <input
+                    v-if="isCurrentUserManager"
                     type="radio"
                     v-model="payingPerson"
                     :value="item.name"
                   />
-                  {{ item?.name }}
+                  <span class="customer-name">{{ item?.name }}</span>
+                  <div class="counter-btns">
+                    <button @click="updateSlice(item, -1)" title="Odejmij">
+                      -
+                    </button>
+                    <button @click="updateSlice(item, 1)" title="Dodaj">
+                      +
+                    </button>
+                  </div>
+                </div>
 
-                  <button @click="updateSlice(item, 1)" title="Dodaj kawałek">
-                    +
-                  </button>
-                  <button
-                    @click="updateSlice(item, -1)"
-                    title="Odejmij kawałek"
-                  >
-                    -
-                  </button>
-                </span>
-                <span>
-                  zje {{ item.slice }} kawałki
-                  {{ getPlural(item.slice, ["kawałek", "kawałki", "kawałków"])
-                  }}<br />
-                  Ma do zapłacenia
-                  {{ calculatePrice(item) }}
-                </span>
-                <span class="restaurant-name">{{
-                  item?.selectedRestaurant || "Nieznana"
-                }}</span>
+                <div class="price-info">
+                  <p class="slices-count">
+                    zje <strong>{{ item.slice }}</strong>
+                    {{
+                      getPlural(item.slice, ["kawałek", "kawałki", "kawałków"])
+                    }}
+                  </p>
+                  <p class="amount">
+                    Do zapłaty: <span>{{ calculatePrice(item) }} zł</span>
+                  </p>
+                  <span class="restaurant-tag">{{
+                    item?.selectedRestaurant || "Nieznana"
+                  }}</span>
+                </div>
               </div>
               <div class="order-body">
                 <ul class="pizza-list">
@@ -78,7 +82,6 @@
               <li v-for="(count, name) in pizzas" :key="name">
                 <input type="checkbox" :value="name" v-model="checkedPizza" />
                 {{ name }}: <span v-if="count < 2">{{ count }}</span>
-                <!-- ten v-model albo nie działa albo nie jest potrzbeny -->
                 <select v-if="count > 1" v-model.number="selectPizzas[name]">
                   <option v-for="n in count" :key="n" :value="n">
                     {{ n }}
@@ -88,14 +91,16 @@
               </li>
             </ul>
           </div>
-          <strong v-if="isCurrentUserManager">
+          <strong v-if="isCurrentUserManager" class="MenagerView">
             Łączna liczba kawałków {{ SummarySlices }} łączna cena
             <span>{{ TotalMoney }}</span>
             <div v-if="payingPerson">
               <div v-if="payingPerson" class="paying-info">
-                Płaci: <strong>{{ payingPerson }}</strong>
+                Płaci: <strong class="Paying-person">{{ payingPerson }}</strong>
                 <div>
-                  <h2>Podaj numer telefonu</h2>
+                  <h2 class="phone-number-paying-person">
+                    Podaj numer telefonu
+                  </h2>
                   <input
                     type="tel"
                     name="tel"
@@ -129,7 +134,7 @@
               :key="pizzaName"
             >
               <span v-if="pizzaName !== 'Ładowanie...'">
-                🍕 <strong>{{ count }}</strong>
+                🍕 <strong>{{ pizzaName }} x {{ count }}</strong>
               </span>
             </li>
           </ul>
@@ -160,12 +165,17 @@
               >👤 {{ person.name }} ({{ person.slices }} szt.)</span
             >
             <strong class="person-amount">{{ person.toPay }} zł</strong>
+            <strong>{{ person.paied }}</strong>
           </div>
         </div>
       </div>
 
       <div v-else class="empty-state">
-        <p>nie ma zamówień &nbsp; &nbsp; &nbsp; o<span style="font-size: 20px;">I</span>o</p>
+        <p>
+          nie ma zamówień &nbsp; &nbsp; &nbsp; o<span style="font-size: 20px"
+            >I</span
+          >o
+        </p>
       </div>
 
       <hr class="divider" />
@@ -174,7 +184,9 @@
         <button class="btn-refresh" @click="fetchOrderedPizzas">
           Pokaż całe zamówienie
         </button>
-        <button class="btn-clear" @click="clearApi">Wyczyść API</button>
+        <!-- <button class="btn-clear" @click="clearApi">
+          Wyczyść zamówienie
+        </button> -->
       </div>
     </div>
   </div>
@@ -198,14 +210,33 @@ export default {
       orderedPizzas: [],
       FullOrderFlag: true,
       tel: "",
-      steps: [
-        { valid: false }, // Krok 0
-        { valid: false }, // Krok 1
-        { valid: false }, // Krok 2 (ten, którego szukał watcher)
-      ],
+      currentStep: 0,
+      steps: [{ valid: false }, { valid: false }, { valid: false }],
     };
   },
   watch: {
+    summary: {
+      handler(newVal) {
+        if (!newVal) return;
+        newVal.forEach((item) => {
+          if (item?.pizzas && item.selectedRestaurant) {
+            item.pizzas.forEach((pId) => {
+              const name = this.getPizzaNameFromMenu(
+                pId,
+                item.selectedRestaurant,
+              );
+              if (
+                name !== "Ładowanie..." &&
+                this.selectPizzas[name] === undefined
+              ) {
+                this.selectPizzas[name] = 1;
+              }
+            });
+          }
+        });
+      },
+      deep: true,
+    },
     user: {
       handler(newOrders) {
         this.steps[0].valid = true;
@@ -258,9 +289,7 @@ export default {
         console.error(error);
       }
     },
-
     async fetchMenuToCache(key) {
-      // potrzebne
       if (!key || this.allMenus[key]) return;
       try {
         const response = await fetch(
@@ -273,7 +302,6 @@ export default {
       }
     },
     async fetchSummary() {
-      //Potrzebne
       try {
         const response = await fetch(
           `https://webwizards.home.pl/jacek/pizza/api/?method=getTodayOrder`,
@@ -283,8 +311,8 @@ export default {
         console.error(error);
       }
     },
-
     async UpdataOrder(bodyContent) {
+      if (!bodyContent || !bodyContent.name) return;
       try {
         await fetch(
           `https://webwizards.home.pl/jacek/pizza/api/?method=updateTodayOrder`,
@@ -299,81 +327,94 @@ export default {
         console.error("Błąd", error);
       }
     },
-
-    //CHWILOWE CZYSZCENIE
     async clearApi() {
       try {
         const clearResponse = await fetch(
           `https://webwizards.home.pl/jacek/pizza/api/?method=clearTodayOrder`,
         );
-
         if (clearResponse.ok) {
-          console.log("jeje");
+          this.fetchSummary();
+          this.orderedPizzas = [];
         }
       } catch (error) {
         console.error(error);
       }
     },
-    // iovniosdnviosdnvdsinvsdiondinvidosnvdinvisodnvisdnvoinvisonvdino
     async updateSlice(item, change) {
+      if (!item || !item.name) return;
       const newCount = (parseFloat(item.slice) || 0) + change;
-      item.slice = newCount;
+      item.slice = newCount >= 0 ? newCount : 0;
       this.UpdataOrder(item);
     },
     async approveFlavors() {
-      const validationMessage = this.SummarySlices;
-      if (!validationMessage.includes("Idealnie")) {
-        alert("Błąd w ilości pizz");
+      if (!this.SummarySlices.includes("Idealnie")) {
+        alert("Nie możesz zamówić niepełnej pizzy! Dobierz brakujące kawałki.");
         return;
-      } 
+      }
       const person = this.summary.find(
         (p) => p && p.name === this.payingPerson,
       );
-
       const phoneToVerify = this.tel || (person ? person.phone : null);
 
       if (!this.payingPerson || !phoneToVerify) {
-        alert("Wybierz osobę płacącą i uzupełnij numer telefonu!");
+        alert("Wybierz osobę płacącą i podaj numer!");
         return;
       }
 
+      const phoneRegex = /^[0-9]{9}$/;
+
+      if (!phoneRegex.test(phoneToVerify.replace(/\s|-/g, ""))) {
+        alert("Numer telefonu musi składać się z 9 cyfr!");
+        return;
+      }
+
+      const participantsList = this.summary
+        .filter((item) => item && item.name && item.selectedRestaurant)
+        .map((item) => ({
+          name: item.name,
+          slices: item.slice,
+          toPay: this.calculatePrice(item),
+          restaurant: item.selectedRestaurant,
+          paied: item.paied,
+        }));
+
+      if (participantsList.length === 0) {
+        alert("Brak poprawnych danych zamówienia!");
+        return;
+      }
+
+      const pizzasToOrder = {};
+      this.checkedPizza.forEach((name) => {
+        pizzasToOrder[name] = this.selectPizzas[name] || 1;
+      });
+
       try {
-        const clearResponse = await fetch(
+        await fetch(
           `https://webwizards.home.pl/jacek/pizza/api/?method=clearTodayOrder`,
         );
 
-        if (clearResponse.ok) {
-          const participantsList = this.summary
-            .filter((item) => item && item.name)
-            .map((item) => ({
-              name: item.name,
-              slices: item.slice,
-              toPay: this.calculatePrice(item),
-              restaurant: item.selectedRestaurant,
-            }));
+        this.FinalOrderSummary = {
+          selectedPizzas: pizzasToOrder,
+          paied: person ? person.paied : null,
+          payer: {
+            name: this.payingPerson,
+            phone: phoneToVerify,
+            totalToPayAtRestaurant: this.TotalMoney,
+          },
+          participants: participantsList,
+        };
 
-          this.FinalOrderSummary = {
-            selectedPizzas: { ...this.checkedPizza },
-            payer: {
-              name: this.payingPerson,
-              phone: phoneToVerify,
-              totalToPayAtRestaurant: this.TotalMoney,
-            },
-            participants: participantsList,
-          };
+        const setResponse = await fetch(
+          `https://webwizards.home.pl/jacek/pizza/api/?method=setTodayOrder`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(this.FinalOrderSummary),
+          },
+        );
 
-          const setResponse = await fetch(
-            `https://webwizards.home.pl/jacek/pizza/api/?method=setTodayOrder`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(this.FinalOrderSummary),
-            },
-          );
-
-          if (setResponse.ok) {
-            alert("Zamówienie i lista składek zostały zapisane!");
-          }
+        if (setResponse.ok) {
+          this.fetchOrderedPizzas();
         }
       } catch (error) {
         console.error("Wystąpił błąd podczas finalizacji:", error);
@@ -385,8 +426,7 @@ export default {
           `https://webwizards.home.pl/jacek/pizza/api/?method=getTodayOrder`,
         );
         const data = await response.json();
-
-        this.orderedPizzas = data;
+        this.orderedPizzas = Array.isArray(data) ? data : [data];
       } catch (error) {
         console.error("Błąd pobierania:", error);
       }
@@ -403,7 +443,6 @@ export default {
           const person = this.summary.find(
             (p) => p && p.name === this.payingPerson,
           );
-
           if (person) {
             person.phone = tel;
             this.UpdataOrder(person);
@@ -430,11 +469,7 @@ export default {
       }
       return 0;
     },
-
     initPizzasSelect() {
-      const pizzas = this.selectPizzas || {};
-      const entries = Object.entries(pizzas);
-      console.log(entries);
       return "";
     },
     calculatePrice(item) {
@@ -444,52 +479,34 @@ export default {
       const pricePerSlice = totalCost / totalSlices;
       return (pricePerSlice * (parseInt(item.slice) || 0)).toFixed(2);
     },
-
     WhoPaied() {
-      const TelNumber = this.summary.find((p) => p && p.tel == p.tel);
-      return TelNumber;
+      return this.summary ? this.summary.find((p) => p && p.phone) : null;
     },
   },
   computed: {
     SummaryOrders() {
       const totals = {};
       if (!this.summary || !Array.isArray(this.summary)) return totals;
-
       this.summary.forEach((element) => {
         if (!element) return;
         const restaurantKey = element.selectedRestaurant;
         if (!totals[restaurantKey]) totals[restaurantKey] = {};
-
         if (element.pizzas && Array.isArray(element.pizzas)) {
           element.pizzas.forEach((pId) => {
             const pName = this.getPizzaNameFromMenu(pId, restaurantKey);
-
-            // TO JEST KLUCZOWE:
-            // Jeśli tej pizzy nie ma jeszcze w selectPizzas, dodaj ją z wartością 1
-            if (this.selectPizzas[pName] === undefined) {
-              this.selectPizzas[pName] = 1;
-            }
-
             totals[restaurantKey][pName] =
               (totals[restaurantKey][pName] || 0) + 1;
           });
         }
       });
-
       return totals;
     },
-
     isCurrentUserManager() {
       const savedName = Cookies.get("user_name");
       if (!savedName || !this.summary) return false;
-
-      // Szukamy osoby o tym imieniu w liście uczestników
       const currentUser = this.summary.find((p) => p && p.name === savedName);
-
-      // Zwraca true tylko, jeśli osoba istnieje i ma manager: true
       return currentUser && currentUser.manager === true;
     },
-
     isFullOrderVisible() {
       if (!this.summary || !Array.isArray(this.summary)) return false;
       return this.summary.some((item) => item && item.name);
@@ -497,10 +514,8 @@ export default {
     TotalMoney() {
       let total = 0;
       if (!this.checkedPizza || this.checkedPizza.length === 0) return "0.00";
-
       this.checkedPizza.forEach((pizzaName) => {
         const quantity = parseInt(this.selectPizzas[pizzaName]) || 1;
-
         let price = 0;
         for (const restaurant in this.allMenus) {
           const pizzaInMenu = this.allMenus[restaurant].find(
@@ -511,51 +526,47 @@ export default {
             break;
           }
         }
-
         total += price * quantity;
       });
-
       return total.toFixed(2);
     },
     SlicePrice() {
       return 0;
     },
-
     SummarySlices() {
       if (!this.summary || !Array.isArray(this.summary)) return "0";
 
+      const KAWAŁKI_W_PIZZY = 8;
       const totalWantedSlices = this.summary.reduce((total, item) => {
         return total + (parseInt(item?.slice) || 0);
       }, 0);
 
+      // Sprawdzamy, czy suma kawałków dzieli się przez 8 bez reszty
+      const remainder = totalWantedSlices % KAWAŁKI_W_PIZZY;
+
+      if (remainder !== 0) {
+        const missing = KAWAŁKI_W_PIZZY - remainder;
+        return `${totalWantedSlices} kawałków. Brakuje jeszcze ${missing} do pełnej pizzy!`;
+      }
+
+      // Jeśli mamy wielokrotność 8, sprawdzamy czy liczba wybranych pizz się zgadza
+      const requiredPizzas = totalWantedSlices / KAWAŁKI_W_PIZZY;
       let pizzasSelected = 0;
       this.checkedPizza.forEach((pName) => {
         pizzasSelected += parseInt(this.selectPizzas[pName]) || 1;
       });
-      const remainder = totalWantedSlices % 8;
-      const missingToFull = remainder === 0 ? 0 : 8 - remainder;
-      const targetSlices = totalWantedSlices + missingToFull;
-      const targetPizzas = targetSlices / 8;
 
-      const diffPizzas = targetPizzas - pizzasSelected;
+      const diffPizzas = requiredPizzas - pizzasSelected;
+
       if (diffPizzas > 0) {
-        const plural =
-          diffPizzas === 1 ? "pizzę" : diffPizzas < 5 ? "pizze" : "pizz";
-        let msg = `${totalWantedSlices} kawałków (brakuje ${missingToFull} do pełnej pizzy). `;
-        if (missingToFull == 0) {
-          msg = `to ${totalWantedSlices} `;
-        }
-        msg += `Musisz wybrać jeszcze ${diffPizzas} ${plural}.`;
-        return msg;
+        return `Masz ${totalWantedSlices} kawałków (pełne pizze). Wybierz jeszcze ${diffPizzas} ${this.getPlural(diffPizzas, ['smak', 'smaki', 'smaków']) }`;
       } else if (diffPizzas === 0) {
-        return `${totalWantedSlices} kawałków. Idealnie! Wybrałeś odpowiednią ilość (${pizzasSelected} szt).`;
+        // TYLKO TUTAJ pojawi się słowo "Idealnie"
+        return `${totalWantedSlices} kawałków. Idealnie! Pełne pizze (${pizzasSelected} szt).`;
       } else {
-        const over = Math.abs(diffPizzas);
-        const plural = over === 1 ? "pizzę" : over < 5 ? "pizze" : "pizz";
-        return `${totalWantedSlices} kawałków. Wybrałeś o ${over} ${plural} za dużo!`;
+        return `Wybrałeś za dużo smaków względem liczby kawałków!`;
       }
     },
-
     totalSlicesCount() {
       if (!this.summary || !Array.isArray(this.summary)) return 0;
       return this.summary.reduce(
@@ -563,12 +574,10 @@ export default {
         0,
       );
     },
-
     payingUsers() {
       return this.summary ? this.summary.filter((u) => u?.phone) : [];
     },
   },
-
   mounted() {
     this.fetchrestaurants();
     this.fetchSummary();
@@ -579,276 +588,371 @@ export default {
   },
 };
 </script>
-<style scoped>
-/* 1. KONTENER GŁÓWNY - Efekt kartki z zeszytu */
+<style lang="scss" scoped>
+/* GŁÓWNY KONTENER */
 .summary-section {
-  position: sticky;
-  top: 90px;
-  width: 450px;
-  background: #fef9e7;
-  padding: 30px;
-  border: 1px solid #d1d1d1;
-  font-family: "Inter", sans-serif;
-  color: #1a1a1a;
-  z-index: 10;
-  transition: all 0.3s ease;
-  box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.05);
-}
+  background: #fdfdfd;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  font-family: "Segoe UI", Roboto, sans-serif;
+  color: #333;
+  max-height: 600px;
+  overflow-x: hidden;
+  overflow-y: scroll;
 
-/* Stan zwinięty */
-.is-collapsed {
-  height: 55px;
-  width: 300px;
-  overflow: hidden;
-  padding-bottom: 0;
-}
+  /* PRZYCISKI (Globalne) */
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.2s ease-in-out;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 
-/* Czerwona linia marginesu */
-.summary-section::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 35px;
-  width: 1px;
-  background: rgba(255, 0, 0, 0.2);
-}
+    &:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+    &:active {
+      transform: translateY(0);
+    }
+  }
 
-/* 2. TYPOGRAFIA I NAGŁÓWKI */
-h2 {
-  text-align: center;
-  font-size: 1.1rem;
-  font-weight: 900;
-  text-transform: uppercase;
-  border-bottom: 2px solid #1a1a1a;
-  margin-bottom: 20px;
-  padding-bottom: 8px;
-}
+  /* LISTA PIZZ W TRAKCIE WYBORU */
+  ul {
+    list-style: none;
+    padding: 0;
+    margin: 15px 0;
 
-h3,
-h4 {
-  font-size: 1rem;
-  font-weight: 800;
-  margin: 25px 0 10px 45px;
-  text-transform: uppercase;
-  color: #1a1a1a;
-}
+    li {
+      background: white;
+      border: 1px solid #edf2f7;
+      border-radius: 12px;
+      padding: 10px 15px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
 
-h4 {
-  font-size: 0.85rem;
-  color: #444;
-}
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+      color: #2d3436;
 
-/* 3. LISTY I STRUKTURA (Wcięcie 45px dla wszystkiego za linią) */
-.order-list {
-  max-height: 50vh;
-  overflow-y: auto;
-  padding-right: 5px;
-}
+      /* Dropdown SELECT - Intuicyjny wygląd */
+      select {
+        margin-left: auto;
+        padding: 6px 32px 6px 12px;
+        border-radius: 8px;
+        border: 2px solid #6c5ce7;
+        background-color: #fff;
+        color: #6c5ce7;
+        font-weight: 800;
+        appearance: none;
+        cursor: pointer;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c5ce7' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 12px;
 
-.order-list::-webkit-scrollbar {
-  width: 6px;
-}
-.order-list::-webkit-scrollbar-thumb {
-  background: #1a1a1a;
-  border-radius: 10px;
-}
+        &:hover {
+          background-color: #f0eeff;
+        }
+      }
+    }
+  }
 
-ul {
-  list-style: none;
-  padding: 0;
-}
+  /* WIDOK ZATWIERDZONEGO ZAMÓWIENIA (.orders-list) */
+  .orders-list {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px dashed #dfe6e9;
 
-.order-card {
-  padding: 15px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-}
+    h3 {
+      color: #2d3436;
+      font-size: 1.2rem;
+      margin-bottom: 15px;
+    }
 
-/* Globalne wcięcie dla elementów tekstowych */
-.restaurant-name,
-.pizza-list,
-.order-header span:nth-child(2),
-.paying-user-badge,
-.participant-row,
-.final-order-card,
-.ordered-pizzas-summary,
-.empty-state,
-.admin-buttons,
-.debug-info {
-  margin-left: 45px;
-  display: block;
-  line-height: 1.6;
-}
+    .ordered-pizzas-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
 
-/* 4. ELEMENTY INTERAKTYWNE */
-.customer-name {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-weight: 900;
-  font-size: 1.1rem;
-}
+      li {
+        background: #f1f2f6;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        text-transform: none;
 
-.paying-user-badge {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #fff;
-  border: 2px solid #1a1a1a;
-  padding: 10px 15px;
-  margin-top: 15px;
-  margin-bottom: 15px;
-  font-weight: 900;
-  box-shadow: 4px 4px 0px #1a1a1a;
-}
+        strong {
+          color: #6c5ce7;
+          margin-left: 5px;
+        }
+      }
+    }
 
-.paying-user-badge::before {
-  content: "💸";
-}
+    /* Karta osoby płacącej */
+    .final-order-card {
+      background: #f8faff;
+      border: 2px solid #6c5ce7;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 25px;
+      box-shadow: 0 4px 12px rgba(108, 92, 231, 0.1);
 
-select {
-  font-family: inherit;
-  font-weight: 900;
-  border: 2px solid #1a1a1a;
-  border-radius: 4px;
-  padding: 2px 6px;
-  background: #fff;
-  cursor: pointer;
-}
+      .payer-info {
+        font-size: 1.1rem;
+        margin: 0 0 10px 0;
+        strong {
+          color: #6c5ce7;
+          font-size: 1.2rem;
+        }
+      }
 
-/* 5. PRZYCISKI I INPUTY */
-button {
-  cursor: pointer;
-  background: #1a1a1a;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-weight: 800;
-  padding: 8px 16px;
-  transition: 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
+      .phone-info {
+        margin: 0 0 15px 0;
+        .phone-link {
+          color: #0984e3;
+          text-decoration: none;
+          font-weight: bold;
+          border-bottom: 1px solid transparent;
+          &:hover {
+            border-bottom-color: #0984e3;
+          }
+        }
+      }
 
-button:hover {
-  background: #d9534f !important;
-  transform: translateY(-2px);
-}
+      .total-price-display {
+        font-size: 1.3rem;
+        margin: 0;
+        padding-top: 10px;
+        border-top: 1px solid #dcdde1;
+        strong {
+          color: #2ecc71;
+        }
+      }
+    }
 
-.toggle-notes {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 4px 10px;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-}
+    /* Lista kto ile oddaje */
+    .participant-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 15px;
+      background: white;
+      border: 1px solid #edf2f7;
+      border-radius: 10px;
+      margin-bottom: 8px;
 
-.customer-name button {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-}
+      .person-details {
+        font-size: 0.95rem;
+        color: #636e72;
+      }
 
-input[type="tel"] {
-  font-weight: 900;
-  font-size: 1.5rem;
-  border: none;
-  border-bottom: 3px solid #d9534f;
-  width: 100%;
-  background: transparent;
-  outline: none;
-  padding: 8px 0;
-}
+      .person-amount {
+        color: #d63031;
+        font-size: 1.05rem;
+      }
+    }
+  }
 
-/* 6. PODSUMOWANIE FINANSOWE (Główny blok) */
-strong {
-  font-weight: 900;
-}
+  /* WIDOK MANAGERA I FORMULARZ */
+  .MenagerView {
+    display: block;
+    background: #2d3436;
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    margin-top: 20px;
 
-.summary-section > strong {
-  display: block;
-  margin-top: 25px;
-  padding: 20px;
-  border: 3px solid #1a1a1a;
-  background: #fff;
-  text-align: center;
-}
+    span {
+      color: #00cec9;
+      font-weight: bold;
+    }
 
-.summary-section > strong span {
-  color: #d9534f;
-  font-size: 1.6rem;
-  display: block;
-  margin-top: 5px;
-}
+    button {
+      background: #6c5ce7;
+      color: white;
+      width: 100%;
+      padding: 14px;
+      margin-top: 15px;
+      font-size: 1rem;
+    }
+  }
 
-/* 7. KARTA ZREALIZOWANEGO ZAMÓWIENIA (ordered-list) */
-.final-order-card {
-  background: #fff;
-  border: 2px solid #feb2b2;
-  padding: 15px;
-  border-radius: 12px;
-  margin: 15px 0 15px 45px;
-  box-shadow: 4px 4px 0px #feb2b2;
-}
+  /* ELEMENTY DODATKOWE */
+  .divider {
+    border: none;
+    height: 1px;
+    background: #dfe6e9;
+    margin: 30px 0;
+  }
 
-.phone-link {
-  color: #d9534f;
-  text-decoration: none;
-  font-weight: 800;
-  border-bottom: 1px dashed #d9534f;
-}
+  .empty-state {
+    text-align: center;
+    padding: 30px;
+    color: #b2bec3;
+    font-style: italic;
+  }
 
-.total-price-display {
-  font-size: 1.2rem;
-  color: #e74c3c;
-  margin-top: 10px;
-}
+  .admin-buttons {
+    display: flex;
+    gap: 10px;
 
-.participant-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  font-size: 0.95rem;
-}
+    .btn-refresh {
+      background: #00cec9;
+      color: #2d3436;
+      flex: 2;
+    }
 
-/* 8. FORMULARZE: CHECKBOX I RADIO */
-input[type="checkbox"],
-input[type="radio"] {
-  appearance: none;
-  width: 20px;
-  height: 20px;
-  border: 2px solid #1a1a1a;
-  background: #fff;
-  cursor: pointer;
-  position: relative;
-  flex-shrink: 0;
-}
+    .btn-clear {
+      background: #ff7675;
+      color: white;
+      flex: 1;
+    }
 
-input[type="radio"] {
-  border-radius: 50%;
-}
-input[type="checkbox"]:checked,
-input[type="radio"]:checked {
-  background: #1a1a1a;
-}
-input[type="checkbox"]:checked::after {
-  content: "✕";
-  position: absolute;
-  color: #fff;
-  font-size: 12px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
+    button {
+      padding: 12px;
+    }
+  }
 
-.divider {
-  border: none;
-  border-top: 1px dashed #d1d1d1;
-  margin: 25px 0;
-}
+  .toggle-notes {
+    background: #6c5ce7;
+    color: white;
+    padding: 10px 20px;
+    margin-bottom: 20px;
+  }
 
-.admin-buttons {
-  display: flex;
-  gap: 10px;
+  /* DODAJ LUB ZAMIEŃ W .summary-section */
+  .order-header {
+    display: flex;
+    flex-direction: column; // Układ pionowy dla lepszej czytelności
+    gap: 12px;
+    margin-bottom: 15px;
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      .customer-name {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: #2d3436;
+      }
+
+      .counter-btns {
+        display: flex;
+        gap: 5px;
+        margin-left: auto;
+
+        button {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: #f1f2f6;
+          color: #6c5ce7;
+          border: 1px solid #dfe6e9;
+          font-size: 1rem;
+
+          &:hover {
+            background: #6c5ce7;
+            color: white;
+          }
+        }
+      }
+    }
+
+    .price-info {
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 8px;
+      position: relative;
+
+      p {
+        margin: 2px 0;
+        font-size: 0.9rem;
+      }
+
+      .slices-count strong {
+        color: #6c5ce7;
+      }
+
+      .amount {
+        font-weight: 600;
+        span {
+          color: #2ecc71; // Zielony kolor dla ceny
+          font-size: 1.1rem;
+        }
+      }
+
+      .restaurant-tag {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        font-size: 0.7rem;
+        background: #dfe6e9;
+        padding: 2px 8px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        color: #636e72;
+      }
+    }
+  }
+
+  /* STYLIZACJA INPUTA NUMERU TELEFONU */
+  .phone-number-paying-person {
+    font-size: 1rem;
+    color: #00cec9; // Turkusowy pasujący do akcentów Managera
+    margin-bottom: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  input[type="tel"] {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 1.1rem;
+    font-family: inherit;
+    color: #2d3436;
+    background-color: #ffffff;
+    border: 2px solid #dfe6e9;
+    border-radius: 10px;
+    outline: none;
+    transition: all 0.3s ease;
+    box-sizing: border-box; // Ważne, żeby padding nie rozpychał szerokości
+    margin-bottom: 15px;
+
+    &::placeholder {
+      color: #b2bec3;
+      letter-spacing: 2px;
+    }
+
+    &:focus {
+      border-color: #6c5ce7; // Fioletowy focus
+      box-shadow: 0 0 0 4px rgba(108, 92, 231, 0.15);
+      background-color: #fff;
+    }
+
+    /* Styl dla Managera - jeśli input jest w ciemnym boksie */
+    .MenagerView & {
+      background-color: #3d4446;
+      border-color: #4a4a4a;
+      color: white;
+
+      &:focus {
+        border-color: #00cec9;
+        box-shadow: 0 0 0 4px rgba(0, 206, 201, 0.2);
+      }
+    }
+  }
 }
 </style>
