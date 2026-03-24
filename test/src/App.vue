@@ -2,8 +2,10 @@
   <div class="body">
     <topBar :steps="steps" :currentStep="currentStep" />
     <div class="content">
-      <div class="col-main">
-        <userForm v-if="currentStep === 1" v-on:set="user = $event" />
+      <div class="col-main" v-if="currentStep !== 4">
+        <div v-if="isFormVisible">
+          <userForm v-if="currentStep === 1" v-on:set="user = $event" />
+        </div>
 
         <restaurants
           v-if="currentStep === 2"
@@ -22,7 +24,7 @@
           <button
             @click="
               submitOrder(order);
-              this.currentStep = 1;
+              currentStep = 4;
             "
             class="submit-btn"
           >
@@ -31,18 +33,19 @@
         </div>
       </div>
 
-      <aside class="col-sidebar">
+      <aside class="col-sidebar" :class="{ 'center-sidebar': currentStep === 4 }">
         <OrderSummary />
       </aside>
-
-      <FinalOrder />
     </div>
-    <span style="font-size: 8px; color: gray; letter-spacing: 1px"
-      >Autor Filip Najlepszy Praktykant (:
+    
+    <span style="font-size: 8px; color: gray; letter-spacing: 1px">
+      Autor Filip Najlepszy Praktykant (:
     </span>
   </div>
 </template>
 <script>
+import Cookies from "js-cookie";
+
 import topBar from "./components/topBar.vue";
 import userForm from "./components/userForm.vue";
 import restaurants from "./components/restaurants.vue";
@@ -65,21 +68,24 @@ export default {
         { name: "Podaj swoje dane", valid: false },
         { name: "Wybierz pizzerię", valid: false },
         { name: "Na co masz ochotę?", valid: false },
+        { name: "Podsumowanie", valid: false },
       ],
       restaurants: [],
       menu: [],
       allMenus: {},
       pizzas: [],
       user: {},
-      summary: null,
+      summary: [],
       isNotesExpanded: false,
     };
   },
   watch: {
     user: {
       handler() {
-        this.steps[0].valid = true;
-        this.currentStep = 2;
+        if (this.user && Object.keys(this.user).length > 0) {
+          this.steps[0].valid = true;
+          this.currentStep = 2;
+        }
       },
       deep: true,
     },
@@ -130,7 +136,6 @@ export default {
         const pizza = targetMenu.find((p) => p.id == pizzaId);
         return pizza ? pizza.name : `Pizza (ID: ${pizzaId})`;
       } else {
-        this.fetchMenuToCache(restaurantKey);
         return `Ładowanie...`;
       }
     },
@@ -146,13 +151,24 @@ export default {
           },
         );
         this.pizzas = [];
-        //jjsjsjdjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
-        // this.fetchSummary();
+        this.currentStep = 4;
         window.location.reload();
       } catch (error) {
         console.error(error);
       }
     },
+
+    async fetchSummary() {
+      try {
+        const response = await fetch(
+          `https://webwizards.home.pl/jacek/pizza/api/?method=getTodayOrder`,
+        );
+        this.summary = await response.json();
+      } catch (error) {
+        console.error(error);
+      }
+    },
+
     selectPizza(id) {
       if (this.pizzas.includes(id)) {
         this.pizzas = this.pizzas.filter((e) => e != id);
@@ -169,9 +185,25 @@ export default {
         selectedRestaurant: this.selectedRestaurant,
       };
     },
+
+    isFormVisible() {
+      const savedName = Cookies.get("user_name");
+      if (!savedName) return true;
+
+      const alreadyOrdered = this.summary.some((order) => {
+        return order && order.name === savedName;
+      });
+
+      return !alreadyOrdered;
+    },
   },
   mounted() {
     this.fetchrestaurants();
+    this.fetchSummary().then(() => {
+      if (!this.isFormVisible && this.currentStep === 1) {
+        this.currentStep = 4;
+      }
+    });
   },
 };
 </script>
@@ -255,6 +287,34 @@ export default {
   color: #ccc;
   cursor: not-allowed;
   transform: none;
+}
+
+/* ... reszta Twoich stylów ... */
+
+.col-sidebar {
+  width: 480px;
+  position: sticky;
+  top: 100px;
+  display: flex;
+  justify-content: flex-start;
+  padding-right: 20px;
+  box-sizing: border-box;
+  transition: all 0.5s ease; /* Płynne przejście do środka */
+}
+
+/* Nowa klasa do centrowania */
+.center-sidebar {
+  width: 100%;
+  max-width: 800px; /* Możesz dostosować szerokość podsumowania końcowego */
+  margin: 0 auto;
+  position: static;
+  padding-right: 0;
+  justify-content: center;
+}
+
+/* Opcjonalnie: poprawienie kontenera content w kroku 4 */
+.content:has(.center-sidebar) {
+  justify-content: center;
 }
 
 @media (max-width: 1200px) {

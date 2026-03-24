@@ -51,8 +51,7 @@ export default {
   name: "UserForm",
   data() {
     return {
-      summary: [], 
-
+      summary: [],
       form: {
         name: "",
         paied: "",
@@ -82,7 +81,13 @@ export default {
         );
         const data = await response.json();
 
-        this.summary = data.participants || data || [];
+        if (data && data.payer) {
+          this.isOrderFinalized = true;
+        } else {
+          this.isOrderFinalized = false;
+        }
+
+        this.summary = data.participants || (Array.isArray(data) ? data : []);
       } catch (error) {
         console.error("Błąd pobierania zamówień:", error);
         this.summary = [];
@@ -100,15 +105,28 @@ export default {
       }
 
       const normalizedName = this.form.name.trim().toLowerCase();
+
+      // 1. Sprawdzenie czy użytkownik już istnieje
       const alreadyExists = this.summary.some(
         (p) => p && p.name && p.name.trim().toLowerCase() === normalizedName,
       );
 
       if (alreadyExists) {
-        alert(
-          `Użytkownik o tym imieniu jest już na liście. Jeżeli obaj macie tak na imie to podaj pełne imie i naziwko`,
-        );
+        alert(`Użytkownik o tym imieniu jest już na liście.`);
         return false;
+      }
+
+      // 2. NOWA WALIDACJA: Sprawdzenie czy jest już manager
+      if (this.form.manager) {
+        const hasManager = this.summary.some((p) => p && p.manager === true);
+
+        if (hasManager) {
+          alert(
+            "Już ktoś inny jest menagerem dorośli jesteście zacznijcie się dogadywać XD",
+          );
+          this.form.manager = false;
+          return false;
+        }
       }
 
       return true;

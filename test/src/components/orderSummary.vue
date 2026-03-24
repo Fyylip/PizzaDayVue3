@@ -33,6 +33,7 @@
                     <button @click="updateSlice(item, 1)" title="Dodaj">
                       +
                     </button>
+                    <button @click="DelateUser(item.name)">❌</button>
                   </div>
                 </div>
 
@@ -42,9 +43,6 @@
                     {{
                       getPlural(item.slice, ["kawałek", "kawałki", "kawałków"])
                     }}
-                  </p>
-                  <p class="amount">
-                    Do zapłaty: <span>{{ calculatePrice(item) }} zł</span>
                   </p>
                   <span class="restaurant-tag">{{
                     item?.selectedRestaurant || "Nieznana"
@@ -81,7 +79,7 @@
             <!-- {{ selectPizzas }} -->
             <ul v-if="isCurrentUserManager">
               <li v-for="(count, name) in pizzas" :key="name">
-                <input type="checkbox" :value="name" v-model="checkedPizza"/>
+                <input type="checkbox" :value="name" v-model="checkedPizza" />
                 {{ name }}: <span v-if="count < 2">{{ count }}</span>
                 <select v-if="count > 1" v-model.number="selectPizzas[name]">
                   <option v-for="n in count" :key="n" :value="n">
@@ -293,6 +291,35 @@ export default {
         console.error(error);
       }
     },
+    async DelateUser(name) {
+      const savedName = Cookies.get("user_name");
+
+      if (name !== savedName) {
+        alert("Tylko siebie możesz usunąć XD.");
+        return;
+      }
+
+      if (!confirm(`Na pewno chcesz usunąć użytkownika ${name}?`)) return;
+
+      try {
+        const response = await fetch(
+          `https://webwizards.home.pl/jacek/pizza/api/?method=deleteOrderByUserName`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: name }),
+          },
+        );
+
+        if (response.ok) {
+          await this.fetchSummary();
+          console.log(`usunięty ${name}`);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    },
+
     async fetchSummary() {
       try {
         const response = await fetch(
@@ -327,6 +354,7 @@ export default {
         if (clearResponse.ok) {
           this.fetchSummary();
           this.orderedPizzas = [];
+          location.reload();
         }
       } catch (error) {
         console.error(error);
@@ -345,7 +373,7 @@ export default {
       const newCount = (parseFloat(item.slice) || 0) + change;
 
       if (newCount > 8) {
-        return; 
+        return;
       }
 
       if (newCount <= 0) {
@@ -366,7 +394,9 @@ export default {
     },
     async approveFlavors() {
       if (!this.SummarySlices.includes("Idealnie")) {
-        alert("Nie możesz zamówić niepełnej pizzy! Dobierz brakujące kawałki.");
+        alert(
+          "Błąd w ilości kawałków lub pizz (Wszytsko jest napisne w czarnym kwadracie).",
+        );
         return;
       }
       const person = this.summary.find(
@@ -399,7 +429,7 @@ export default {
       if (participantsList.length === 0) {
         alert("Brak poprawnych danych zamówienia!");
         return;
-      }
+      } 
 
       const pizzasToOrder = {};
       this.checkedPizza.forEach((name) => {
@@ -493,9 +523,17 @@ export default {
     calculatePrice(item) {
       const totalCost = parseFloat(this.TotalMoney) || 0;
       const totalSlices = this.totalSlicesCount;
+
       if (totalCost === 0 || totalSlices === 0) return "0.00";
+
       const pricePerSlice = totalCost / totalSlices;
-      return (pricePerSlice * (parseInt(item.slice) || 0)).toFixed(2);
+      let finalPrice = pricePerSlice * (parseInt(item.slice) || 0);
+
+      if (Math.floor(finalPrice) === 21) {
+        return "21.37 LOL XD";
+      }
+
+      return finalPrice.toFixed(2);
     },
     WhoPaied() {
       return this.summary ? this.summary.find((p) => p && p.phone) : null;
@@ -532,20 +570,30 @@ export default {
     TotalMoney() {
       let total = 0;
       if (!this.checkedPizza || this.checkedPizza.length === 0) return "0.00";
+
       this.checkedPizza.forEach((pizzaName) => {
         const quantity = parseInt(this.selectPizzas[pizzaName]) || 1;
         let price = 0;
+
         for (const restaurant in this.allMenus) {
           const pizzaInMenu = this.allMenus[restaurant].find(
             (p) => p.name === pizzaName,
           );
           if (pizzaInMenu) {
-            price = pizzaInMenu.variants?.[1]?.price || 0;
+            // Tu również stosujemy zasadę 21.37 dla pojedynczej pizzy
+            let pPrice = parseFloat(pizzaInMenu.variants?.[1]?.price || 0);
+            price = Math.floor(pPrice) === 21 ? 21.37 : pPrice;
             break;
           }
         }
         total += price * quantity;
       });
+
+      // Dodatkowe sprawdzenie dla sumy końcowej całego zamówienia
+      if (Math.floor(total) === 21) {
+        return "21.37";
+      }
+
       return total.toFixed(2);
     },
     SlicePrice() {
@@ -597,15 +645,20 @@ export default {
     payingUsers() {
       return this.summary ? this.summary.filter((u) => u?.phone) : [];
     },
+
+    ShowArrear() {
+      return 0
+    }
   },
   mounted() {
     this.fetchrestaurants();
     this.fetchSummary();
     this.fetchOrderedPizzas();
+
     this.polling = setInterval(() => {
       this.fetchSummary();
       this.fetchOrderedPizzas();
-    }, 3000);
+    }, 2000);
   },
   beforeUnmount() {
     clearInterval(this.polling);
