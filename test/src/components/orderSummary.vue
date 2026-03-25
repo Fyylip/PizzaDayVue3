@@ -160,10 +160,19 @@
             :key="person.name"
             class="participant-row"
           >
-            <span class="person-details"
-              >👤 {{ person.name }} ({{ person.slices }} szt.)</span
+            <span class="person-details">
+              👤 {{ person.name }} ({{ person.slices }} szt.)
+            </span>
+
+            <strong
+              v-if="person.name !== order.payer.name"
+              class="person-amount"
             >
-            <strong class="person-amount">{{ person.toPay }} zł</strong>
+              {{ person.toPay }} zł
+            </strong>
+
+            <strong v-else> Ta osoba płaci </strong>
+
             <strong>{{ person.paied }}</strong>
           </div>
         </div>
@@ -429,7 +438,7 @@ export default {
       if (participantsList.length === 0) {
         alert("Brak poprawnych danych zamówienia!");
         return;
-      } 
+      }
 
       const pizzasToOrder = {};
       this.checkedPizza.forEach((name) => {
@@ -557,6 +566,14 @@ export default {
       });
       return totals;
     },
+
+    isPayer(name) {
+      const currentPayer = this.payingPerson;
+      const finalOrderPayer = this.orderedPizzas?.[0]?.payer?.name;
+
+      return name === currentPayer || name === finalOrderPayer;
+    },
+
     isCurrentUserManager() {
       const savedName = Cookies.get("user_name");
       if (!savedName || !this.summary) return false;
@@ -647,8 +664,8 @@ export default {
     },
 
     ShowArrear() {
-      return 0
-    }
+      return 0;
+    },
   },
   mounted() {
     this.fetchrestaurants();

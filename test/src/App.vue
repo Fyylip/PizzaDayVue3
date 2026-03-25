@@ -3,24 +3,32 @@
     <topBar :steps="steps" :currentStep="currentStep" />
     <div class="content">
       <div class="col-main" v-if="currentStep !== 4">
-        <div v-if="isFormVisible">
+        <div v-if="isFormVisible && !hasOrderedPizzas">
           <userForm v-if="currentStep === 1" v-on:set="user = $event" />
         </div>
 
+        <div v-else-if="hasOrderedPizzas" class="finalized-alert">
+          <h2>Zamówienie zamknięte 🍕</h2>
+          <p>
+            Ktoś już sfinalizował zamówienie. Sprawdź szczegóły w podsumowaniu.
+          </p>
+          <button @click="currentStep = 4">Przejdź do podsumowania</button>
+        </div>
+
         <restaurants
-          v-if="currentStep === 2"
+          v-if="currentStep === 2 && !hasOrderedPizzas"
           :restaurants="restaurants"
           v-on:select="selectedRestaurant = $event"
         />
 
         <restaurantMenu
-          v-if="currentStep === 3"
+          v-if="currentStep === 3 && !hasOrderedPizzas"
           :menu="menu"
           :selected="pizzas"
           v-on:select="selectPizza($event)"
         />
 
-        <div v-if="currentStep === 3" class="actions">
+        <div v-if="currentStep === 3 && !hasOrderedPizzas" class="actions">
           <button
             @click="
               submitOrder(order);
@@ -33,16 +41,20 @@
         </div>
       </div>
 
-      <aside class="col-sidebar" :class="{ 'center-sidebar': currentStep === 4 }">
+      <aside
+        class="col-sidebar"
+        :class="{ 'center-sidebar': currentStep === 4 }"
+      >
         <OrderSummary />
       </aside>
     </div>
-    
+
     <span style="font-size: 8px; color: gray; letter-spacing: 1px">
       Autor Filip Najlepszy Praktykant (:
     </span>
   </div>
 </template>
+
 <script>
 import Cookies from "js-cookie";
 
@@ -104,6 +116,11 @@ export default {
       },
       deep: true,
     },
+    hasOrderedPizzas(newVal) {
+      if (newVal) {
+        this.currentStep = 4;
+      }
+    },
   },
   methods: {
     async fetchrestaurants() {
@@ -129,7 +146,6 @@ export default {
         console.error(error);
       }
     },
-
     getPizzaNameFromMenu(pizzaId, restaurantKey) {
       const targetMenu = this.allMenus[restaurantKey];
       if (targetMenu) {
@@ -139,7 +155,6 @@ export default {
         return `Ładowanie...`;
       }
     },
-
     async submitOrder(orderPayload) {
       try {
         await fetch(
@@ -157,18 +172,17 @@ export default {
         console.error(error);
       }
     },
-
     async fetchSummary() {
       try {
         const response = await fetch(
           `https://webwizards.home.pl/jacek/pizza/api/?method=getTodayOrder`,
         );
-        this.summary = await response.json();
+        const data = await response.json();
+        this.summary = data;
       } catch (error) {
         console.error(error);
       }
     },
-
     selectPizza(id) {
       if (this.pizzas.includes(id)) {
         this.pizzas = this.pizzas.filter((e) => e != id);
@@ -185,25 +199,44 @@ export default {
         selectedRestaurant: this.selectedRestaurant,
       };
     },
-
+    hasOrderedPizzas() {
+      if (!this.summary) return false;
+      const summaryData = Array.isArray(this.summary)
+        ? this.summary
+        : [this.summary];
+      const finalOrder = summaryData.find((item) => item && item.payer);
+      if (!finalOrder || !finalOrder.selectedPizzas) return false;
+      const pizzaNames = Object.keys(finalOrder.selectedPizzas).filter(
+        (name) => name !== "Ładowanie...",
+      );
+      return pizzaNames.length > 0;
+    },
     isFormVisible() {
       const savedName = Cookies.get("user_name");
       if (!savedName) return true;
-
+      if (!this.summary || !Array.isArray(this.summary)) return true;
       const alreadyOrdered = this.summary.some((order) => {
         return order && order.name === savedName;
       });
-
       return !alreadyOrdered;
     },
   },
   mounted() {
     this.fetchrestaurants();
     this.fetchSummary().then(() => {
-      if (!this.isFormVisible && this.currentStep === 1) {
+      if (this.hasOrderedPizzas) {
+        this.currentStep = 4;
+      } else if (!this.isFormVisible && this.currentStep === 1) {
         this.currentStep = 4;
       }
     });
+
+    this.polling = setInterval(() => {
+      this.fetchSummary();
+    }, 5000);
+  },
+  beforeUnmount() {
+    clearInterval(this.polling);
   },
 };
 </script>
