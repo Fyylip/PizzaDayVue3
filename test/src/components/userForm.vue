@@ -23,14 +23,14 @@
         </select>
       </div>
 
-      <div class="input-group">
+      <!-- <div class="input-group">
         <label for="paied">Metoda płatności</label>
         <select v-model="form.paied" id="paied">
           <option value="" disabled>Wybierz płatność...</option>
           <option value="blik">Blik</option>
           <option value="cash">Gotówka</option>
         </select>
-      </div>
+      </div> -->
 
       <div class="checkbox-section">
         <label class="custom-checkbox">
@@ -54,7 +54,6 @@ export default {
       summary: [],
       form: {
         name: "",
-        paied: "",
         slice: null,
         manager: false,
         isPaingPerson: false,
@@ -97,9 +96,8 @@ export default {
     validateForm() {
       const isNameValid = !!this.form.name && this.form.name.trim().length >= 3;
       const isSliceValid = !!this.form.slice;
-      const isPaymentValid = !!this.form.paied;
 
-      if (!isNameValid || !isSliceValid || !isPaymentValid) {
+      if (!isNameValid || !isSliceValid) {
         alert("Przerósł Cię formularz. Wypełnij wszystkie pola!");
         return false;
       }

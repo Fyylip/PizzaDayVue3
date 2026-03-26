@@ -24,7 +24,7 @@
                     v-model="payingPerson"
                     :value="item.name"
                   />
-                  <span>zaznacz jeśli płaci</span>
+                  <span v-if="isCurrentUserManager">zaznacz jeśli płaci</span>
                   <span class="customer-name">{{ item?.name }}</span>
                   <div class="counter-btns">
                     <button @click="updateSlice(item, -1)" title="Odejmij">
@@ -91,25 +91,31 @@
             </ul>
           </div>
           <strong v-if="isCurrentUserManager" class="MenagerView">
-            Łączna liczba kawałków {{ SummarySlices }} łączna cena
+            Łączna liczba kawałków {{ SummarySlices }} Łączna cena
             <span>{{ TotalMoney }}</span>
             <div v-if="payingPerson">
-              <div v-if="payingPerson" class="paying-info">
-                Płaci: <strong class="Paying-person">{{ payingPerson }}</strong>
-                <div>
-                  <h2 class="phone-number-paying-person">
-                    Podaj numer telefonu
-                  </h2>
-                  <input
-                    type="tel"
-                    name="tel"
-                    id="tel"
-                    v-model="tel"
-                    placeholder="000-000-000"
-                  />
-                  <p>Numer: {{ tel }}</p>
-                  <!-- <button @click="AddPhoneNumer(tel)">Dodaj</button> -->
-                </div>
+              <div class="payment-method-selection">
+                <label>
+                  <input type="radio" value="blik" v-model="paymentMethod" />
+                  BLIK (podaj tel)
+                </label>
+                <label>
+                  <input type="radio" value="gotowka" v-model="paymentMethod" />
+                  Gotówka
+                </label>
+              </div>
+
+              <div v-if="paymentMethod === 'blik'" class="paying-info">
+                <h2 class="phone-number-paying-person">Podaj numer telefonu</h2>
+                <input type="tel" v-model="tel" placeholder="000-000-000" />
+                <p>Numer: {{ tel }}</p>
+              </div>
+
+              <div v-else class="paying-info">
+                <p>
+                  Wybrano płatność <strong>gotówką</strong> – numer telefonu nie
+                  jest wymagany.
+                </p>
               </div>
             </div>
             <button @click="approveFlavors">Zatwierdź smaki</button>
@@ -144,9 +150,12 @@
             </p>
             <p class="phone-info">
               📞 Tel:
-              <a :href="'tel:' + order.payer.phone" class="phone-link">{{
-                order.payer.phone
-              }}</a>
+              <span v-if="order.payer.phone === 'Gotówka'"
+                ><strong>Gotówka</strong></span
+              >
+              <a v-else :href="'tel:' + order.payer.phone" class="phone-link">
+                {{ order.payer.phone }}
+              </a>
             </p>
             <p class="total-price-display">
               Razem:
@@ -172,8 +181,6 @@
             </strong>
 
             <strong v-else> Ta osoba płaci </strong>
-
-            <strong>{{ person.paied }}</strong>
           </div>
         </div>
       </div>
@@ -186,6 +193,50 @@
 
       <div class="admin-buttons">
         <button class="btn-clear" @click="clearApi">Wyczyść zamówienie</button>
+      </div>
+      <div class="history-section">
+        <h3>📜 Historia zamówień</h3>
+
+        <select
+          v-model="selectedFileName"
+          @change="loadOrderFromFile"
+          class="date-input"
+        >
+          <option value="" disabled>Wybierz plik zamówienia</option>
+          <option v-for="file in availableFiles" :key="file" :value="file">
+            {{ file.replace(".json", "").replace(/_/g, ".") }}
+          </option>
+        </select>
+
+        <div class="history-list">
+          <div
+            v-for="(order, index) in PersonsPaied"
+            :key="index"
+            class="history-item"
+          >
+            <div v-if="order && order.payer">
+              <p>💰 <strong>Płacił:</strong> {{ order.payer.name }}</p>
+
+              <div v-if="order.participants">
+                <h4>💰 Lista rozliczeń:</h4>
+                <ul>
+                  <li v-for="p in order.participants" :key="p.name">
+                    {{ p.name }} — <strong>{{ p.toPay }} zł</strong>
+
+                    <input
+                      type="checkbox"
+                      v-model="p.paied"
+                      @change="handleStatusChange"
+                    />
+                    <span :style="{ color: p.paied ? 'green' : 'red' }">
+                      {{ p.paied ? "✅ Zapłacone" : "⏳ Czeka" }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -207,9 +258,15 @@ export default {
       selectPizzas: {},
       FinalOrderSummary: {},
       orderedPizzas: [],
+      Persons: [],
       FullOrderFlag: true,
+      IsPaied: false,
       tel: "",
+      paymentMethod: "blik",
       currentStep: 0,
+      availableFiles: [], // Lista plików z getOrdersList
+      selectedFileName: "", // Wybrany plik z selecta
+      PersonsPaied: [],
       steps: [{ valid: false }, { valid: false }, { valid: false }],
     };
   },
@@ -404,25 +461,38 @@ export default {
     async approveFlavors() {
       if (!this.SummarySlices.includes("Idealnie")) {
         alert(
-          "Błąd w ilości kawałków lub pizz (Wszytsko jest napisne w czarnym kwadracie).",
+          "Błąd w ilości kawałków lub pizz (Wszystko jest napisane w czarnym kwadracie).",
         );
         return;
       }
+
       const person = this.summary.find(
         (p) => p && p.name === this.payingPerson,
       );
-      const phoneToVerify = this.tel || (person ? person.phone : null);
 
-      if (!this.payingPerson || !phoneToVerify) {
-        alert("Wybierz osobę płacącą i podaj numer!");
+      if (!this.payingPerson) {
+        alert("Wybierz osobę płacącą!");
         return;
       }
 
-      const phoneRegex = /^[0-9]{9}$/;
+      let finalPhoneValue = "";
 
-      if (!phoneRegex.test(phoneToVerify.replace(/\s|-/g, ""))) {
-        alert("Numer telefonu musi składać się z 9 cyfr!");
-        return;
+      if (this.paymentMethod === "gotowka") {
+        finalPhoneValue = "Gotówka";
+      } else {
+        const rawPhone = this.tel || (person ? person.phone : "");
+        const cleanPhone = rawPhone
+          ? String(rawPhone).replace(/\s|-/g, "")
+          : "";
+        const phoneRegex = /^[0-9]{9}$/;
+
+        if (!phoneRegex.test(cleanPhone)) {
+          alert(
+            "Przy płatności BLIK numer telefonu musi składać się z 9 cyfr!",
+          );
+          return;
+        }
+        finalPhoneValue = cleanPhone;
       }
 
       const participantsList = this.summary
@@ -432,7 +502,7 @@ export default {
           slices: item.slice,
           toPay: this.calculatePrice(item),
           restaurant: item.selectedRestaurant,
-          paied: item.paied,
+          paied: item.paied || false,
         }));
 
       if (participantsList.length === 0) {
@@ -446,6 +516,7 @@ export default {
       });
 
       try {
+        // Czyścimy poprzednie zamówienie przed ustawieniem nowego
         await fetch(
           `https://webwizards.home.pl/jacek/pizza/api/?method=clearTodayOrder`,
         );
@@ -455,7 +526,7 @@ export default {
           paied: person ? person.paied : null,
           payer: {
             name: this.payingPerson,
-            phone: phoneToVerify,
+            phone: finalPhoneValue,
             totalToPayAtRestaurant: this.TotalMoney,
           },
           participants: participantsList,
@@ -475,6 +546,7 @@ export default {
         }
       } catch (error) {
         console.error("Wystąpił błąd podczas finalizacji:", error);
+        alert("Wystąpił błąd serwera przy zapisie zamówienia.");
       }
     },
     async fetchOrderedPizzas() {
@@ -486,6 +558,40 @@ export default {
         this.orderedPizzas = Array.isArray(data) ? data : [data];
       } catch (error) {
         console.error("Błąd pobierania:", error);
+      }
+    },
+
+    async GetPiedPerson(data) {
+      if (!data) return;
+
+      const [year, month, day] = data.split("-");
+      const formattedDate = `${day}_${month}_${year}`;
+
+      try {
+        const response = await fetch(
+          `https://webwizards.home.pl/jacek/pizza/api/?method=getSpecyfiedOrder&name=${formattedDate}.json`,
+        );
+
+        if (!response.ok) {
+          this.Persons = [];
+          return;
+        }
+
+        const result = await response.json();
+
+        if (!result) {
+          this.Persons = [];
+          return;
+        }
+
+        // Filtrujemy tablicę, aby pozbyć się ewentualnych nulli z danych
+        const rawData = Array.isArray(result) ? result : [result];
+        this.Persons = rawData.filter(
+          (item) => item !== null && typeof item === "object",
+        );
+      } catch (error) {
+        console.error("Błąd:", error);
+        this.Persons = [];
       }
     },
     async AddPhoneNumer(tel) {
@@ -509,6 +615,69 @@ export default {
         console.error(error);
       }
     },
+
+    async fetchFilesList() {
+      try {
+        const response = await fetch(
+          "https://webwizards.home.pl/jacek/pizza/api/?method=getOrdersList",
+        );
+        const files = await response.json();
+        // Odwracamy listę, żeby najnowsze daty były na górze
+        this.availableFiles = Array.isArray(files) ? files.reverse() : [];
+      } catch (error) {
+        console.error("Błąd pobierania listy plików:", error);
+      }
+    },
+
+    async loadOrderFromFile() {
+      if (!this.selectedFileName) return;
+      try {
+        const response = await fetch(
+          `https://webwizards.home.pl/jacek/pizza/api/?method=getSpecyfiedOrder&name=${this.selectedFileName}`,
+        );
+        const result = await response.json();
+
+        // Konwersja na tablicę i filtrowanie nulli
+        const rawData = Array.isArray(result) ? result : [result];
+        this.PersonsPaied = rawData.filter(
+          (item) => item !== null && typeof item === "object",
+        );
+      } catch (error) {
+        console.error("Błąd ładowania pliku:", error);
+        this.PersonsPaied = [];
+      }
+    },
+
+    async handleStatusChange() {
+      if (!this.selectedFileName || this.PersonsPaied.length === 0) {
+        console.error("Brak pliku lub danych do zapisu");
+        return;
+      }
+
+      const url = `https://webwizards.home.pl/jacek/pizza/api/?method=updateOrderByName&file=${this.selectedFileName}`;
+      const payload = JSON.stringify(this.PersonsPaied);
+      console.log(this.selectedFileName);
+      
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: payload,
+        });
+
+        if (response.ok) {
+          console.log("Zapisano:", this.selectedFileName);
+
+        } else {
+          console.error("Serwer zwrócił błąd:", response.status);
+        }
+      } catch (error) {
+        console.error("Błąd sieci:", error);
+      }
+    },
+
     getPizzaNameFromMenu(pizzaId, restaurantKey) {
       const targetMenu = this.allMenus[restaurantKey];
       if (targetMenu) {
@@ -529,6 +698,7 @@ export default {
     initPizzasSelect() {
       return "";
     },
+
     calculatePrice(item) {
       const totalCost = parseFloat(this.TotalMoney) || 0;
       const totalSlices = this.totalSlicesCount;
@@ -642,10 +812,10 @@ export default {
       const diffPizzas = requiredPizzas - pizzasSelected;
 
       if (diffPizzas > 0) {
-        return `Masz ${totalWantedSlices} kawałków (pełne pizze). Wybierz jeszcze ${diffPizzas} ${this.getPlural(
+        return `Masz ${totalWantedSlices} kawałków (pełne pizze). Do dodania ${diffPizzas} ${this.getPlural(
           diffPizzas,
-          ["smak", "smaki", "smaków"],
-        )}`;
+          ["pizza", "pizze", "pizze"],
+        )}.`;
       } else if (diffPizzas === 0) {
         return `${totalWantedSlices} kawałków. Idealnie! Pełne pizze (${pizzasSelected} szt).`;
       } else {
@@ -668,6 +838,7 @@ export default {
     },
   },
   mounted() {
+    this.fetchFilesList(); // <--- To dodaj
     this.fetchrestaurants();
     this.fetchSummary();
     this.fetchOrderedPizzas();
