@@ -3,9 +3,9 @@
     class="col summary-section"
     :class="{ 'is-collapsed': !isNotesExpanded }"
   >
-    <!-- <button class="toggle-notes" @click="isNotesExpanded = !isNotesExpanded">
-        {{ isNotesExpanded ? "✕ Ukryj" : "☰ Pokaż zamówienia" }}
-      </button> -->
+    <!-- Miłej zabawy kod jest beznadzijeny ale głównie dlatego, że ciągle coś się musiału zmieniać i dostawałem nowe rzeczy i nowe zależności.
+     jeśli jesteś kolejnym prakykantem i dostałeś do zrobienia backend tutaj to sory ale może na moim githubie 
+     znajdziesz poprawiony kod https://github.com/Fyylip/PizzaDayVue3  -->
     <div>
       <h2 v-if="isFullOrderVisible">Propozycja smaków</h2>
       <transition name="note-fade" v-if="isFullOrderVisible">
@@ -273,7 +273,9 @@ export default {
   watch: {
     summary: {
       handler(newVal) {
-        if (!newVal) return;
+        // Dodaj sprawdzenie Array.isArray(newVal)
+        if (!newVal || !Array.isArray(newVal)) return;
+
         newVal.forEach((item) => {
           if (item?.pizzas && item.selectedRestaurant) {
             item.pizzas.forEach((pId) => {
@@ -391,7 +393,9 @@ export default {
         const response = await fetch(
           `https://webwizards.home.pl/jacek/pizza/api/?method=getTodayOrder`,
         );
-        this.summary = await response.json();
+        const data = await response.json();
+        // Jeśli data nie jest tablicą, zapakuj ją w tablicę [data]
+        this.summary = Array.isArray(data) ? data : data ? [data] : [];
       } catch (error) {
         console.error(error);
       }
@@ -657,7 +661,7 @@ export default {
       const url = `https://webwizards.home.pl/jacek/pizza/api/?method=updateOrderByName&file=${this.selectedFileName}`;
       const payload = JSON.stringify(this.PersonsPaied);
       console.log(this.selectedFileName);
-      
+
       try {
         const response = await fetch(url, {
           method: "POST",
@@ -669,7 +673,6 @@ export default {
 
         if (response.ok) {
           console.log("Zapisano:", this.selectedFileName);
-
         } else {
           console.error("Serwer zwrócił błąd:", response.status);
         }
@@ -1217,6 +1220,97 @@ export default {
       &:focus {
         border-color: #00cec9;
         box-shadow: 0 0 0 4px rgba(0, 206, 201, 0.2);
+      }
+    }
+  }
+  /* SEKCOJA HISTORII I ROZLICZEŃ */
+  .history-list {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+
+    .history-item {
+      background: #ffffff;
+      border: 1px solid #edf2f7;
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+      transition: transform 0.2s ease;
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.06);
+      }
+
+      p {
+        margin: 0 0 15px 0;
+        font-size: 1.05rem;
+        color: #2d3436;
+
+        strong {
+          color: #6c5ce7;
+        }
+      }
+
+      h4 {
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #b2bec3;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #f1f2f6;
+        padding-bottom: 8px;
+      }
+
+      ul {
+        margin: 0;
+        li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between; // Rozpycha imię i status na boki
+          padding: 12px;
+          background: #f8f9fa;
+          border: none;
+          border-radius: 10px;
+          margin-bottom: 6px;
+          text-transform: none; // Wyłączamy uppercase z globalnych styli li
+          font-size: 0.95rem;
+
+          // Styl dla kwoty
+          strong {
+            color: #2d3436;
+            margin-right: auto;
+            margin-left: 10px;
+          }
+
+          /* Stylizacja Checkboxa */
+          input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #6c5ce7; // Kolor fioletowy dla checkboxa
+            margin-right: 10px;
+          }
+
+          /* Stylizacja Statusu (Badge) */
+          span {
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            min-width: 90px;
+            text-align: center;
+
+            // Dynamiczne tło dla statusu (opcjonalnie)
+            &[style*="color: green"] {
+              background: rgba(46, 204, 113, 0.1);
+            }
+            &[style*="color: red"] {
+              background: rgba(255, 118, 117, 0.1);
+            }
+          }
+        }
       }
     }
   }
